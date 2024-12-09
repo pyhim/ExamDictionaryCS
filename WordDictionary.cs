@@ -1,17 +1,8 @@
 using System.Collections;
-using System.Reflection;
 using System.Text.Json;
 // ReSharper disable All
 
 namespace ExamDictionary;
-
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
-internal sealed class HomeDirectoryAttribute : Attribute
-{
-    public string HomeDirectory { get; init; }
-    
-    public HomeDirectoryAttribute(string homeDirectory) => HomeDirectory = homeDirectory;
-}
 
 public class DictType
 {
@@ -29,13 +20,13 @@ public sealed class WordDictionary : IEnumerable<KeyValuePair<string, List<strin
 {
     private static JsonSerializerOptions _serializationOptions = new JsonSerializerOptions{ WriteIndented = true };
     
-    private string _homeDirectory;
+    private readonly string _homeDirectory;
     
-    private string _cacheDirectory;
+    private readonly string _cacheDirectory;
 
-    private string _exportDirectory;
+    private readonly string _exportDirectory;
     
-    private string _jsonFilePath;
+    private readonly string _jsonFilePath;
     
     public DictType Type { get; init; }
 
@@ -47,8 +38,8 @@ public sealed class WordDictionary : IEnumerable<KeyValuePair<string, List<strin
     public WordDictionary(string from, string to, string homeDirectory)
     {
         _homeDirectory = homeDirectory;
-        _cacheDirectory =$"{_homeDirectory}/cache";
-        _exportDirectory =$"{_homeDirectory}/export";
+        _cacheDirectory = $"{_homeDirectory}/cache";
+        _exportDirectory = $"{_homeDirectory}/export";
         
         Type = new DictType(from, to);
         _jsonFilePath = $"{_cacheDirectory}/{Type.From}-{Type.To}.json";
@@ -64,20 +55,16 @@ public sealed class WordDictionary : IEnumerable<KeyValuePair<string, List<strin
         configFileStream.Close();
     }
 
-    public WordDictionary(string configName, string homeDirectory)
+    public WordDictionary(string configFilePath, string homeDirectory)
     {
         _homeDirectory = homeDirectory;
         _cacheDirectory = $"{_homeDirectory}/cache";
         _exportDirectory = $"{_homeDirectory}/export";
-
-        string configFilePath = $"{_cacheDirectory}/{configName}.cfg";
-        var configFileStream = new StreamReader(new FileStream(configFilePath, FileMode.Open, FileAccess.Read));
-        string jsonFilePath = configFileStream.ReadLine() ??
-                              throw new KeyNotFoundException("Json file path is missing.");
-        string dictType = configFileStream.ReadLine() ??
-                          throw new KeyNotFoundException("Dict type is missing.");
         
-        _jsonFilePath = jsonFilePath.Split('=').Last();
+        var configFile = ConfigFile.Deserialize(configFilePath);
+
+        _jsonFilePath = configFile["jsonFilePath"];
+        string dictType = configFile["type"];
         string[] dictTypeArray = dictType.Split('=').Last().Split('-');
         Type = new DictType(dictTypeArray[0], dictTypeArray[1]);
     }
@@ -108,7 +95,7 @@ public sealed class WordDictionary : IEnumerable<KeyValuePair<string, List<strin
         WriteJsonFile(dict);
     }
 
-    public void ChangeWord(string key, string oldWord, string newWord)
+    public void ChangeTranslation(string key, string oldWord, string newWord)
     {
         var dict = ReadJsonFile();
         int index = dict[key].IndexOf(oldWord);
@@ -116,6 +103,25 @@ public sealed class WordDictionary : IEnumerable<KeyValuePair<string, List<strin
         if (index == -1) throw new KeyNotFoundException("Word to change is not found");
         
         dict[key][index] = newWord;
+        WriteJsonFile(dict);
+    }
+
+    public void DeletePair(string key)
+    {
+        var dict = ReadJsonFile();
+        dict.Remove(key);
+        
+        WriteJsonFile(dict);
+    }
+
+    public void DeleteTranslation(string key, string toDelete)
+    {
+        var dict = ReadJsonFile();
+        int index = dict[key].IndexOf(toDelete);
+        
+        if (index == -1) throw new KeyNotFoundException("Word to delete is not found");
+        
+        dict[key].RemoveAt(index);
         WriteJsonFile(dict);
     }
 
